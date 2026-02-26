@@ -1,3 +1,16 @@
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Koyomi de Go! - Lucky Days & Void of Course Moon Calendar',
+  description: 'Find the best lucky days based on Japanese traditional calendar. Check Rokuyo, Ichiryu Manbai-bi, Tensha-bi, Tora no Hi, void of course moon times for business, finance, moving, and marriage.',
+  openGraph: {
+    title: 'Koyomi de Go! - Lucky Days Calendar',
+    description: 'Japanese traditional calendar tool for finding auspicious dates.',
+    url: 'https://koyomi.phtechai.com',
+    type: 'website',
+  },
+}
+
 import Link from 'next/link'
 import { Container } from '@/components/Container'
 import { YearMonthPicker } from '@/components/YearMonthPicker'

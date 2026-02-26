@@ -33,6 +33,30 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script dangerouslySetInnerHTML={{__html: `window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-W7EM3S0YFS');`}} />
       </head>
       <body className="font-sans antialiased bg-white text-gray-900">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              "name": "Koyomi de Go!",
+              "url": "https://koyomi.phtechai.com",
+              "description": "Japanese traditional calendar tool - find lucky days, void of course moon times, and best dates for business, finance, and life events.",
+              "applicationCategory": "UtilityApplication",
+              "operatingSystem": "Web",
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+              },
+              "creator": {
+                "@type": "Organization",
+                "name": "PH Tech AI",
+                "url": "https://www.phtechai.com"
+              }
+            })
+          }}
+        />
         <Header />
         <main className="min-h-screen">
           {children}
