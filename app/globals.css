@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+html {
+  font-size: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans JP', 'Hiragino Sans', sans-serif;
+  color: #333;
+  letter-spacing: 0.03em;
+  -webkit-font-smoothing: antialiased;
+}
