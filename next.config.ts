@@ -12,6 +12,8 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  reactStrictMode: true,
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }]
   },
