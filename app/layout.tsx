@@ -10,11 +10,14 @@ export const metadata: Metadata = {
     template: '%s | 暦でゴー！'
   },
   description: '六曜・一粒万倍日・天赦日・寅の日・巳の日・ボイドタイムなど、縁起のいい日をカレンダーで確認。起業・引越・口座開設に最適な日がわかります。',
+  keywords: ['六曜', '一粒万倍日', '天赦日', '寅の日', '巳の日', 'ボイドタイム', '吉日カレンダー', '縁起のいい日', '開運日', '大安', '友引'],
   openGraph: {
     type: 'website',
     locale: 'ja_JP',
     url: 'https://koyomi.phtechai.com',
     siteName: '暦でゴー！',
+    title: '暦でゴー！ - 吉日・ボイドタイムカレンダー',
+    description: '六曜・一粒万倍日・天赦日・寅の日・巳の日・ボイドタイムなど、縁起のいい日をカレンダーで確認。',
   },
   icons: {
     icon: [
@@ -23,6 +26,11 @@ export const metadata: Metadata = {
     ],
   },
   robots: { index: true, follow: true },
+  twitter: {
+    card: 'summary_large_image',
+    title: '暦でゴー！ - 吉日・ボイドタイムカレンダー',
+    description: '六曜・一粒万倍日・天赦日・寅の日・ボイドタイムなど、縁起のいい日をカレンダーで確認。',
+  },
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -39,9 +47,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              "name": "Koyomi de Go!",
+              "name": "暦でゴー！",
               "url": "https://koyomi.phtechai.com",
-              "description": "Japanese traditional calendar tool - find lucky days, void of course moon times, and best dates for business, finance, and life events.",
+              "description": "六曜・一粒万倍日・天赦日・寅の日・巳の日・ボイドタイムなど、縁起のいい日をカレンダーで確認できる無料ツールです。",
               "applicationCategory": "UtilityApplication",
               "operatingSystem": "Web",
               "offers": {
