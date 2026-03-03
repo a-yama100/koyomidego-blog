@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import './globals.css'
+import Script from 'next/script'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://koyomi.phtechai.com'),
@@ -33,12 +34,12 @@ export const metadata: Metadata = {
   },
 }
 
+const gaId = process.env.NEXT_PUBLIC_GA_ID || ''
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ja">
       <head>
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-W7EM3S0YFS"></script>
-        <script dangerouslySetInnerHTML={{__html: `window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-W7EM3S0YFS');`}} />
       </head>
       <body className="font-sans antialiased bg-white text-gray-900">
         <script
@@ -70,6 +71,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           {children}
         </main>
         <Footer />
+        {gaId && (
+          <>
+            <Script
+              src={"https://www.googletagmanager.com/gtag/js?id=" + gaId}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {"window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','" + gaId + "');"}
+            </Script>
+          </>
+        )}
       </body>
     </html>
   )
