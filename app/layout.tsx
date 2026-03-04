@@ -5,7 +5,7 @@ import './globals.css'
 import Script from 'next/script'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://koyomi.phtechai.com'),
+  metadataBase: new URL('https://koyomi.phaiworks.com'),
   title: {
     default: '暦でゴー！ - 吉日・ボイドタイムカレンダー',
     template: '%s | 暦でゴー！'
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ja_JP',
-    url: 'https://koyomi.phtechai.com',
+    url: 'https://koyomi.phaiworks.com',
     siteName: '暦でゴー！',
     title: '暦でゴー！ - 吉日・ボイドタイムカレンダー',
     description: '六曜・一粒万倍日・天赦日・寅の日・巳の日・ボイドタイムなど、縁起のいい日をカレンダーで確認。',
@@ -49,7 +49,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               "@context": "https://schema.org",
               "@type": "WebApplication",
               "name": "暦でゴー！",
-              "url": "https://koyomi.phtechai.com",
+              "url": "https://koyomi.phaiworks.com",
               "description": "六曜・一粒万倍日・天赦日・寅の日・巳の日・ボイドタイムなど、縁起のいい日をカレンダーで確認できる無料ツールです。",
               "applicationCategory": "UtilityApplication",
               "operatingSystem": "Web",
@@ -61,7 +61,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               "creator": {
                 "@type": "Organization",
                 "name": "PH Tech AI",
-                "url": "https://www.phtechai.com"
+                "url": "https://www.phaiworks.com"
               }
             })
           }}

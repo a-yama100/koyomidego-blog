@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Koyomi de Go! - Lucky Days Calendar',
     description: 'Japanese traditional calendar tool for finding auspicious dates.',
-    url: 'https://koyomi.phtechai.com',
+    url: 'https://koyomi.phaiworks.com',
     type: 'website',
   },
 }

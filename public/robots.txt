@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://koyomi.phtechai.com/sitemap.xml
+Sitemap: https://koyomi.phaiworks.com/sitemap.xml
