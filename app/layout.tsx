@@ -60,7 +60,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               },
               "creator": {
                 "@type": "Organization",
-                "name": "PH Tech AI",
+                "name": "PH AI Works",
                 "url": "https://www.phaiworks.com"
               }
             })
