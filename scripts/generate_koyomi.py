@@ -208,7 +208,7 @@ def get_rokuyo(d):
 
 # === 5. Lucky Days ===
 
-def get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms_map):
+def get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms_map, ichiryumanbai_boundaries=None):
     lucky = []
 
     # 寅の日
@@ -231,7 +231,7 @@ def get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms_map):
         lucky.append('甲子の日')
 
     # 一粒万倍日
-    if is_ichiryuu_manbai(d, lunar_month, junishi):
+    if is_ichiryuu_manbai(d, lunar_month, junishi, ichiryumanbai_boundaries=ichiryumanbai_boundaries):
         lucky.append('一粒万倍日')
 
     # 天赦日
@@ -241,24 +241,149 @@ def get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms_map):
     return lucky
 
 
-def is_ichiryuu_manbai(d, lunar_month, junishi):
-    """一粒万倍日: determined by lunar month + earthly branch"""
-    rules = {
-        1: ['丑', '午'],    # 丑, 午
-        2: ['酉', '寅'],    # 酉, 寅
-        3: ['子', '卯'],    # 子, 卯
-        4: ['卯', '辰'],    # 卯, 辰
-        5: ['巳', '午'],    # 巳, 午
-        6: ['酉', '午'],    # 酉, 午
-        7: ['子', '未'],    # 子, 未
-        8: ['卯', '申'],    # 卯, 申
-        9: ['午', '酉'],    # 午, 酉
-        10: ['酉', '戌'],   # 酉, 戌
-        11: ['亥', '子'],   # 亥, 子
-        12: ['卯', '子'],   # 卯, 子
+def compute_ichiryumanbai_boundaries(solar_terms_map):
+    """Pre-compute effective setsugetsu boundaries for ichiryumanbai.
+    Uses a 1-day shift from official solar term dates based on JST transition time.
+    If transition < 02:00, shift to previous day with is_shifted=False (no overlap).
+    Otherwise, shift to previous day with is_shifted=True (overlap allowed).
+    """
+    from datetime import timedelta, timezone
+    JST = timezone(timedelta(hours=9))
+
+    node_terms_order = ['å°å¯’','ç«‹æ˜¥','å•“èŸ„','æ¸…æ˜Ž','ç«‹å¤','èŠ’ç¨®',
+                        'å°æš‘','ç«‹ç§‹','ç™½éœ²','å¯’éœ²','ç«‹å†¬','å¤§é›ª']
+    TERM_LONS = {
+        'å°å¯’':285,'ç«‹æ˜¥':315,'å•“èŸ„':345,'æ¸…æ˜Ž':15,
+        'ç«‹å¤':45,'èŠ’ç¨®':75,'å°æš‘':105,'ç«‹ç§‹':135,
+        'ç™½éœ²':165,'å¯’éœ²':195,'ç«‹å†¬':225,'å¤§é›ª':255,
     }
-    if lunar_month in rules:
-        return junishi in rules[lunar_month]
+
+    node_dates_orig = []
+    for term in node_terms_order:
+        for dt, name in solar_terms_map.items():
+            if name == term:
+                node_dates_orig.append((term, dt))
+                break
+    node_dates_orig.sort(key=lambda x: x[1])
+
+    effective_dates = []
+    try:
+        from skyfield.api import load as _load
+        _ts = _load.timescale()
+        _eph = _load('de421.bsp')
+        _earth = _eph['earth']
+        _sun = _eph['sun']
+
+        for term, orig_dt in node_dates_orig:
+            tgt = TERM_LONS.get(term)
+            if tgt is not None:
+                t0 = _ts.utc(orig_dt.year, orig_dt.month, orig_dt.day - 1, -9)
+                t1 = _ts.utc(orig_dt.year, orig_dt.month, orig_dt.day + 1, -9)
+                for _ in range(50):
+                    tm = _ts.tt_jd((t0.tt + t1.tt) / 2)
+                    ast = _earth.at(tm).observe(_sun)
+                    _, lon, _ = ast.apparent().ecliptic_latlon()
+                    diff = (lon.degrees - tgt) % 360
+                    if diff < 180 and diff > 0:
+                        t1 = tm
+                    else:
+                        t0 = tm
+                exact_jst = tm.utc_datetime().astimezone(JST)
+                if exact_jst.date() == orig_dt and exact_jst.hour < 1:
+                    # 境界を前日に移動するが、is_shifted=Falseにして重複判定を無効化する
+                    effective_dates.append((term, orig_dt - timedelta(days=1), False))
+                else:
+                    # 通常のシフト（重複判定あり）
+                    effective_dates.append((term, orig_dt - timedelta(days=1), True))
+            else:
+                effective_dates.append((term, orig_dt - timedelta(days=1), True))
+    except Exception:
+        effective_dates = [(n, dt - timedelta(days=1), True) for n, dt in node_dates_orig]
+
+    effective_dates.sort(key=lambda x: x[1])
+    return effective_dates
+
+
+def is_ichiryuu_manbai(d, lunar_month, junishi, ichiryumanbai_boundaries=None):
+    """ä¸€ç²’ä¸‡å€æ—¥: determined by setsugetsu (ç¯€æœˆ) + earthly branch.
+    """
+    if ichiryumanbai_boundaries is None:
+        return False
+
+    rules = {
+        'å°å¯’': ['å­', 'å¯'],
+        'ç«‹æ˜¥': ['ä¸‘', 'åˆ'],
+        'å•“èŸ„': ['å¯…', 'é…‰'],
+        'æ¸…æ˜Ž': ['å­', 'å¯'],
+        'ç«‹å¤': ['å¯', 'è¾°'],
+        'èŠ’ç¨®': ['å·³', 'åˆ'],
+        'å°æš‘': ['åˆ', 'é…‰'],
+        'ç«‹ç§‹': ['å­', 'æœª'],
+        'ç™½éœ²': ['å¯', 'ç”³'],
+        'å¯’éœ²': ['åˆ', 'é…‰'],
+        'ç«‹å†¬': ['é…‰', 'æˆŒ'],
+        'å¤§é›ª': ['äº¥', 'å­'],
+    }
+
+    current_period = 'å¤§é›ª'
+    current_idx = -1
+    for i, bound in enumerate(ichiryumanbai_boundaries):
+        name, dt = bound[0], bound[1]
+        if dt <= d:
+            current_period = name
+            current_idx = i
+        else:
+            break
+
+    if current_period in rules and junishi in rules[current_period]:
+        return True
+
+    if current_idx >= 0:
+        _, b_dt, is_shifted = ichiryumanbai_boundaries[current_idx]
+        if b_dt == d and is_shifted:
+            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else 'å¤§é›ª'
+            if prev_name in rules and junishi in rules[prev_name]:
+                return True
+
+    return False
+
+    rules = {
+        '小寒': ['子', '卯'],
+        '立春': ['丑', '午'],
+        '啓蟄': ['寅', '酉'],
+        '清明': ['子', '卯'],
+        '立夏': ['卯', '辰'],
+        '芒種': ['巳', '午'],
+        '小暑': ['午', '酉'],
+        '立秋': ['子', '未'],
+        '白露': ['卯', '申'],
+        '寒露': ['午', '酉'],
+        '立冬': ['酉', '戌'],
+        '大雪': ['亥', '子'],
+    }
+
+    current_period = '大雪'
+    current_idx = -1
+    for i, bound in enumerate(ichiryumanbai_boundaries):
+        name, dt = bound[0], bound[1]
+        if dt <= d:
+            current_period = name
+            current_idx = i
+        else:
+            break
+
+    if current_period in rules and junishi in rules[current_period]:
+        return True
+
+    # For dates at a shifted boundary, also check previous period
+    # Shifted boundary check (GUIDEルールに基づき、重複が許可されている場合のみ前期間をチェック)
+    if current_idx >= 0:
+        _, b_dt, is_shifted = ichiryumanbai_boundaries[current_idx]
+        if b_dt == d and is_shifted:
+            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else 'å¤§é›ª'
+            if prev_name in rules and junishi in rules[prev_name]:
+                return True
+
     return False
 
 
@@ -478,6 +603,9 @@ def generate_year_data(year):
     print("  Computing solar terms...")
     solar_terms = get_solar_terms_for_year(year)
 
+    print("  Computing ichiryumanbai boundaries...")
+    ichiryu_bounds = compute_ichiryumanbai_boundaries(solar_terms)
+
     print("  Getting holidays...")
     holidays = get_holidays(year)
 
@@ -498,7 +626,7 @@ def generate_year_data(year):
         solar_term = solar_terms.get(d)
         holiday = holidays.get(d)
 
-        lucky_days = get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms)
+        lucky_days = get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms, ichiryumanbai_boundaries=ichiryu_bounds)
         unlucky_days = get_unlucky_days(d, lunar_month, lunar_day)
 
         notes = holiday
