@@ -87,77 +87,37 @@ def get_lunar_phases_for_year(year):
 
 # === 3. Solar Terms (Nijushi Sekki) ===
 def get_solar_terms_for_year(year):
-    """Return dict of date -> term_name"""
     if not HAS_SKYFIELD:
         return {}
-
-    from skyfield.almanac import seasons
-
     ts = load.timescale()
     eph = load('de421.bsp')
-
-    # Get equinoxes/solstices
-    t0 = ts.utc(year, 1, 1)
-    t1 = ts.utc(year + 1, 1, 1)
-
-    # For full 24 terms, we compute sun longitude
-    from skyfield.almanac import find_discrete
-
-    earth = eph['earth']
-    sun = eph['sun']
-
+    earth, sun = eph['earth'], eph['sun']
     TERM_NAMES = [
-        '小寒', '大寒', '立春', '雨水',
-        '啓蟄', '春分', '清明', '穀雨',
-        '立夏', '小満', '芒種', '夏至',
-        '小暑', '大暑', '立秋', '処暑',
-        '白露', '秋分', '寒露', '霜降',
-        '立冬', '小雪', '大雪', '冬至',
+        '小寒', '大寒', '立春', '雨水', '啓蟄', '春分', '清明', '穀雨',
+        '立夏', '小満', '芒種', '夏至', '小暑', '大暑', '立秋', '処暑',
+        '白露', '秋分', '寒露', '霜降', '立冬', '小雪', '大雪', '冬至',
     ]
-
     result = {}
-
-    # Check each day for solar longitude crossing 15-degree boundaries
     for month in range(1, 13):
         for day in range(1, 32):
             try:
                 d = date(year, month, day)
             except ValueError:
                 continue
-            t = ts.utc(year, month, day, 12)  # noon JST approx
+            t = ts.utc(year, month, day, 12)
             astrometric = earth.at(t).observe(sun)
-            _, lon, _ = astrometric.apparent().ecliptic_latlon()
-            deg = lon.degrees
-
-            # Check previous day
-            if day > 1:
-                try:
-                    prev_d = date(year, month, day - 1)
-                except ValueError:
-                    continue
-                t_prev = ts.utc(year, month, day - 1, 12)
-                astrometric_prev = earth.at(t_prev).observe(sun)
-                _, lon_prev, _ = astrometric_prev.apparent().ecliptic_latlon()
-                deg_prev = lon_prev.degrees
-
-                for i in range(24):
-                    boundary = i * 15
-                    # Check if we crossed this boundary
-                    dp = deg_prev % 360
-                    dc = deg % 360
-
-                    if dp > 350 and dc < 10:
-                        dc += 360
-                    if dp < 10 and dc > 350:
-                        dp += 360
-
-                    if dp < boundary <= dc or dp <= boundary < dc:
-                        # Map boundary to term index
-                        # 小寒 = 285°, so index = ((boundary - 285) / 15) % 24
-                        term_idx = int(((boundary - 285) / 15) % 24)
-                        if 0 <= term_idx < 24:
-                            result[d] = TERM_NAMES[term_idx]
-
+            deg = astrometric.apparent().ecliptic_latlon()[1].degrees
+            prev_d = d - timedelta(days=1)
+            t_prev = ts.utc(prev_d.year, prev_d.month, prev_d.day, 12)
+            deg_prev = earth.at(t_prev).observe(sun).apparent().ecliptic_latlon()[1].degrees
+            for i in range(24):
+                boundary = i * 15
+                dp, dc = deg_prev % 360, deg % 360
+                if dp > 350 and dc < 10: dc += 360
+                if dp < 10 and dc > 350: dp += 360
+                if dp < boundary <= dc or dp <= boundary < dc:
+                    term_idx = int(((boundary - 285) / 15) % 24)
+                    result[d] = TERM_NAMES[term_idx]
     return result
 
 
@@ -250,12 +210,12 @@ def compute_ichiryumanbai_boundaries(solar_terms_map):
     from datetime import timedelta, timezone
     JST = timezone(timedelta(hours=9))
 
-    node_terms_order = ['å°å¯’','ç«‹æ˜¥','å•“èŸ„','æ¸…æ˜Ž','ç«‹å¤','èŠ’ç¨®',
-                        'å°æš‘','ç«‹ç§‹','ç™½éœ²','å¯’éœ²','ç«‹å†¬','å¤§é›ª']
+    node_terms_order = ['小寒','立春','啓蟄','清明','立夏','芒種',
+                        '小暑','立秋','白露','寒露','立冬','大雪']
     TERM_LONS = {
-        'å°å¯’':285,'ç«‹æ˜¥':315,'å•“èŸ„':345,'æ¸…æ˜Ž':15,
-        'ç«‹å¤':45,'èŠ’ç¨®':75,'å°æš‘':105,'ç«‹ç§‹':135,
-        'ç™½éœ²':165,'å¯’éœ²':195,'ç«‹å†¬':225,'å¤§é›ª':255,
+        '小寒':285,'立春':315,'啓蟄':345,'清明':15,
+        '立夏':45,'芒種':75,'小暑':105,'立秋':135,
+        '白露':165,'寒露':195,'立冬':225,'大雪':255,
     }
 
     node_dates_orig = []
@@ -305,46 +265,51 @@ def compute_ichiryumanbai_boundaries(solar_terms_map):
 
 
 def is_ichiryuu_manbai(d, lunar_month, junishi, ichiryumanbai_boundaries=None):
-    """ä¸€ç²’ä¸‡å€æ—¥: determined by setsugetsu (ç¯€æœˆ) + earthly branch.
-    """
     if ichiryumanbai_boundaries is None:
         return False
-
     rules = {
-        'å°å¯’': ['å­', 'å¯'],
-        'ç«‹æ˜¥': ['ä¸‘', 'åˆ'],
-        'å•“èŸ„': ['å¯…', 'é…‰'],
-        'æ¸…æ˜Ž': ['å­', 'å¯'],
-        'ç«‹å¤': ['å¯', 'è¾°'],
-        'èŠ’ç¨®': ['å·³', 'åˆ'],
-        'å°æš‘': ['åˆ', 'é…‰'],
-        'ç«‹ç§‹': ['å­', 'æœª'],
-        'ç™½éœ²': ['å¯', 'ç”³'],
-        'å¯’éœ²': ['åˆ', 'é…‰'],
-        'ç«‹å†¬': ['é…‰', 'æˆŒ'],
-        'å¤§é›ª': ['äº¥', 'å­'],
+        '小寒': ['子', '卯'], '立春': ['丑', '午'], '啓蟄': ['寅', '酉'], '清明': ['子', '卯'],
+        '立夏': ['卯', '辰'], '芒種': ['巳', '午'], '小暑': ['午', '酉'], '立秋': ['子', '未'],
+        '白露': ['卯', '申'], '寒露': ['午', '酉'], '立冬': ['酉', '戌'], '大雪': ['亥', '子'],
     }
-
-    current_period = 'å¤§é›ª'
+    current_period = '大雪'
     current_idx = -1
     for i, bound in enumerate(ichiryumanbai_boundaries):
         name, dt = bound[0], bound[1]
         if dt <= d:
-            current_period = name
-            current_idx = i
+            current_period, current_idx = name, i
         else:
             break
-
     if current_period in rules and junishi in rules[current_period]:
         return True
-
     if current_idx >= 0:
         _, b_dt, is_shifted = ichiryumanbai_boundaries[current_idx]
         if b_dt == d and is_shifted:
-            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else 'å¤§é›ª'
+            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else '大雪'
             if prev_name in rules and junishi in rules[prev_name]:
                 return True
-
+    return False
+    rules = {
+        '小寒': ['子', '卯'], '立春': ['丑', '午'], '啓蟄': ['寅', '酉'], '清明': ['子', '卯'],
+        '立夏': ['卯', '辰'], '芒種': ['巳', '午'], '小暑': ['午', '酉'], '立秋': ['子', '未'],
+        '白露': ['卯', '申'], '寒露': ['午', '酉'], '立冬': ['酉', '戌'], '大雪': ['亥', '子'],
+    }
+    current_period = '大雪'
+    current_idx = -1
+    for i, bound in enumerate(ichiryumanbai_boundaries):
+        name, dt = bound[0], bound[1]
+        if dt <= d:
+            current_period, current_idx = name, i
+        else:
+            break
+    if current_period in rules and junishi in rules[current_period]:
+        return True
+    if current_idx >= 0:
+        _, b_dt, is_shifted = ichiryumanbai_boundaries[current_idx]
+        if b_dt == d and is_shifted:
+            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else '大雪'
+            if prev_name in rules and junishi in rules[prev_name]:
+                return True
     return False
 
     rules = {
@@ -375,17 +340,14 @@ def is_ichiryuu_manbai(d, lunar_month, junishi, ichiryumanbai_boundaries=None):
     if current_period in rules and junishi in rules[current_period]:
         return True
 
-    # For dates at a shifted boundary, also check previous period
-    # Shifted boundary check (GUIDEルールに基づき、重複が許可されている場合のみ前期間をチェック)
     if current_idx >= 0:
         _, b_dt, is_shifted = ichiryumanbai_boundaries[current_idx]
         if b_dt == d and is_shifted:
-            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else 'å¤§é›ª'
+            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else '大雪'
             if prev_name in rules and junishi in rules[prev_name]:
                 return True
 
     return False
-
 
 def is_tensha(d, solar_terms_map, eto_name):
     """天赦日: Best day of the year, based on season + eto
