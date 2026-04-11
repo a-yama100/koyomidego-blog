@@ -33,7 +33,7 @@ export function LoadingButton({
   const widthClass = fullWidth ? 'w-full' : ''
   return (
     <button
-      className={baseStyles + ' ' + variants[variant] + ' ' + sizes[size] + ' ' + widthClass + ' ' + className}
+      className={'cursor-pointer disabled:cursor-not-allowed ' + baseStyles + ' ' + variants[variant] + ' ' + sizes[size] + ' ' + widthClass + ' ' + className}
       disabled={disabled || loading}
       {...props}
     >
