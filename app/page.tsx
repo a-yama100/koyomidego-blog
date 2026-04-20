@@ -1,5 +1,7 @@
 import { Metadata } from 'next'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Koyomi de Go! - Lucky Days & Void of Course Moon Calendar',
   description: 'Find the best lucky days based on Japanese traditional calendar. Check Rokuyo, Ichiryu Manbai-bi, Tensha-bi, Tora no Hi, void of course moon times for business, finance, moving, and marriage.',
