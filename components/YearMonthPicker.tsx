@@ -1,16 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 export function YearMonthPicker() {
+  // SSR/hydration時点の値（CDNキャッシュで古くなる可能性あり）
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)
   const router = useRouter()
 
+  // hydration後にクライアントの現在日時で上書き（CDNキャッシュ無効化用）
+  useEffect(() => {
+    const now = new Date()
+    setYear(now.getFullYear())
+    setMonth(now.getMonth() + 1)
+  }, [])
+
   const years: number[] = []
-  for (let y = today.getFullYear() - 1; y <= today.getFullYear() + 2; y++) {
+  for (let y = year - 1; y <= year + 2; y++) {
     years.push(y)
   }
 

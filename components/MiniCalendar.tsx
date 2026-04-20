@@ -134,12 +134,20 @@ function MiniMonth({ data }: { data: MonthData }) {
 }
 
 export function MiniCalendar() {
+  // SSR/hydration時点の値（CDNキャッシュで古くなる可能性あり）
   const today = new Date()
   const [centerYear, setCenterYear] = useState(today.getFullYear())
   const [centerMonth, setCenterMonth] = useState(today.getMonth() + 1)
   const [monthsData, setMonthsData] = useState<MonthData[]>([])
   const [loading, setLoading] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // hydration後にクライアントの現在日時で上書き（CDNキャッシュ無効化用）
+  useEffect(() => {
+    const now = new Date()
+    setCenterYear(now.getFullYear())
+    setCenterMonth(now.getMonth() + 1)
+  }, [])
 
   // Generate 3 months: prev, current, next
   function getThreeMonths(y: number, m: number) {
