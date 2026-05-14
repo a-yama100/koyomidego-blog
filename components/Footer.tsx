@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Container } from './Container'
+import { CurrentMonthLink } from './CurrentMonthLink'
 
 export function Footer() {
   const currentYear = new Date().getFullYear()
@@ -8,10 +9,10 @@ export function Footer() {
       <Container>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <div className="flex items-center gap-2 mb-4">
+            <Link href="/" className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
               <span className="text-2xl">*</span>
               <span className="text-lg font-bold text-white">{"暦でゴー！"}</span>
-            </div>
+            </Link>
             <p className="text-indigo-300 text-sm">
               {"六曜・一粒万倍日・天赦日・ボイドタイムなど、暦の情報をわかりやすくお届けします。"}
             </p>
@@ -19,7 +20,7 @@ export function Footer() {
           <div>
             <h3 className="text-white font-semibold mb-4">{"ページ"}</h3>
             <ul className="space-y-2">
-              <li><Link href="/calendar" className="text-indigo-300 hover:text-white text-sm transition-colors">{"カレンダー"}</Link></li>
+              <li><CurrentMonthLink className="text-indigo-300 hover:text-white text-sm transition-colors">{"カレンダー"}</CurrentMonthLink></li>
               <li><Link href="/best-days" className="text-indigo-300 hover:text-white text-sm transition-colors">{"吉日一覧"}</Link></li>
               <li><Link href="/about" className="text-indigo-300 hover:text-white text-sm transition-colors">{"暦について"}</Link></li>
             </ul>

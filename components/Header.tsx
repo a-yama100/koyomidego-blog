@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { Container } from './Container'
+import { CurrentMonthLink } from './CurrentMonthLink'
 
 function SiteLogo() {
   return (
@@ -28,7 +29,7 @@ export function Header() {
             <span className="text-lg font-bold text-white">{'暦でゴー！'}</span>
           </Link>
           <nav className="hidden md:flex items-center space-x-3">
-            <Link href="/calendar" className={navLinkClass}>{'カレンダー'}</Link>
+            <CurrentMonthLink className={navLinkClass}>{'カレンダー'}</CurrentMonthLink>
             <Link href="/best-days" className={navLinkClass}>{'吉日一覧'}</Link>
             <Link href="/about" className={navLinkClass}>{'暦について'}</Link>
           </nav>
@@ -51,7 +52,7 @@ export function Header() {
         {isMenuOpen && (
           <nav className="md:hidden py-3 border-t border-indigo-800">
             <div className="flex flex-col space-y-2">
-              <Link href="/calendar" className={mobileLinkClass} onClick={() => setIsMenuOpen(false)}>{'カレンダー'}</Link>
+              <CurrentMonthLink className={mobileLinkClass} onClick={() => setIsMenuOpen(false)}>{'カレンダー'}</CurrentMonthLink>
               <Link href="/best-days" className={mobileLinkClass} onClick={() => setIsMenuOpen(false)}>{'吉日一覧'}</Link>
               <Link href="/about" className={mobileLinkClass} onClick={() => setIsMenuOpen(false)}>{'暦について'}</Link>
             </div>

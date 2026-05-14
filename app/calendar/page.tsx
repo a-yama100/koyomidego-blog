@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
 
+export const dynamic = 'force-dynamic'
+
 export default function CalendarIndex() {
   const now = new Date()
   const year = now.getFullYear()

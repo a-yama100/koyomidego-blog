@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 interface Props {
   className?: string
   children: React.ReactNode
+  onClick?: () => void
 }
 
 /**
@@ -13,7 +14,7 @@ interface Props {
  * SSR/hydration 後に useEffect でクライアントの現在年月を反映させ、
  * CDN キャッシュで href が古くなっても初回描画後に正しいURLへ更新される。
  */
-export function CurrentMonthLink({ className, children }: Props) {
+export function CurrentMonthLink({ className, children, onClick }: Props) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)
@@ -27,7 +28,7 @@ export function CurrentMonthLink({ className, children }: Props) {
   const href = '/calendar/' + year + '/' + String(month).padStart(2, '0')
 
   return (
-    <Link href={href} className={className}>
+    <Link href={href} className={className} onClick={onClick}>
       {children}
     </Link>
   )
