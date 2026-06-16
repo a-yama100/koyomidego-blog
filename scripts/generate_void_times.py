@@ -28,8 +28,15 @@ venus = eph["venus"]
 mars = eph["mars"]
 jupiter = eph["jupiter barycenter"]
 saturn = eph["saturn barycenter"]
+uranus = eph["uranus barycenter"]
+neptune = eph["neptune barycenter"]
+pluto = eph["pluto barycenter"]
 
-PLANETS = [sun, mercury, venus, mars, jupiter, saturn]
+# Modern void-of-course: the Moon's last Ptolemaic aspect before changing signs is
+# measured against ALL other planets, including the modern outer planets. Omitting
+# Uranus/Neptune/Pluto makes the void period start far too early (a later aspect to
+# an outer planet is missed), which is what common VOC tables actually use.
+PLANETS = [sun, mercury, venus, mars, jupiter, saturn, uranus, neptune, pluto]
 
 # Major aspects (degrees)
 ASPECTS = [0, 60, 90, 120, 180]  # conjunction, sextile, square, trine, opposition
@@ -37,16 +44,22 @@ ASPECT_ORB = 1.0  # degree orb for exact aspect
 
 
 def moon_longitude(t):
-    """Get ecliptic longitude of Moon in degrees"""
+    """Tropical ecliptic longitude of the Moon, in degrees.
+
+    Western astrology uses the tropical zodiac, whose 0 deg Aries is the vernal
+    equinox *of date*. The longitude must therefore be referred to the ecliptic and
+    equinox of date (epoch=t); the J2000 frame is off by accumulated precession
+    (~0.36 deg by 2026 ~= 40 min of Moon motion), enough to shift sign-ingress times.
+    """
     astrometric = earth.at(t).observe(moon_body)
-    _, lon, _ = astrometric.apparent().ecliptic_latlon()
+    _, lon, _ = astrometric.apparent().ecliptic_latlon(epoch=t)
     return lon.degrees
 
 
 def planet_longitude(planet, t):
-    """Get ecliptic longitude of a planet in degrees"""
+    """Tropical ecliptic longitude of a planet, in degrees (ecliptic of date)."""
     astrometric = earth.at(t).observe(planet)
-    _, lon, _ = astrometric.apparent().ecliptic_latlon()
+    _, lon, _ = astrometric.apparent().ecliptic_latlon(epoch=t)
     return lon.degrees
 
 
@@ -80,12 +93,6 @@ def find_moon_sign_changes(year):
             t_start = times[i-1]
             t_end = times[i]
             for _ in range(15):  # 15 iterations = ~0.5 second precision
-                t_mid = ts.utc(
-                    year, 1, 1,
-                    (t_start.utc_datetime().timestamp() + t_end.utc_datetime().timestamp()) / 2
-                    / 3600 - (datetime(year, 1, 1, tzinfo=timezone.utc).timestamp() / 3600)
-                )
-                # Simpler approach: use Julian dates
                 jd_mid = (t_start.tt + t_end.tt) / 2
                 t_mid = ts.tt_jd(jd_mid)
                 mid_sign = get_zodiac_sign(moon_longitude(t_mid))
@@ -103,61 +110,79 @@ def find_moon_sign_changes(year):
     return changes
 
 
+def _aspect_offset(planet, target, jd):
+    """Signed angle (deg, in [-180,180]) between the Moon-planet separation and an
+    aspect target. Zero exactly at the aspect."""
+    t = ts.tt_jd(jd)
+    diff = (moon_longitude(t) - planet_longitude(planet, t)) - target
+    return ((diff + 180) % 360) - 180
+
+
+def _refine_aspect(planet, target, lo_jd, hi_jd):
+    """Bisect to the instant the aspect is exact, given a bracket with a sign change."""
+    flo = _aspect_offset(planet, target, lo_jd)
+    for _ in range(40):  # ~sub-second precision
+        mid = (lo_jd + hi_jd) / 2
+        fmid = _aspect_offset(planet, target, mid)
+        if (flo <= 0 <= fmid) or (flo >= 0 >= fmid):
+            hi_jd = mid
+        else:
+            lo_jd, flo = mid, fmid
+    return ts.tt_jd((lo_jd + hi_jd) / 2)
+
+
 def find_last_aspect_before(sign_change_time, sign_start_time_approx):
-    """Find when Moon makes its last major aspect before leaving current sign.
-    
-    We search backwards from sign_change_time to find the last exact major aspect.
+    """Find the exact instant of the Moon's last major aspect before leaving its sign.
+
+    Searches backwards from the sign change in coarse steps to locate the most recent
+    aspect bracket, then bisects within that bracket for an accurate time. Aspects are
+    checked against all planets in PLANETS (incl. the outer planets).
     """
-    # Search in 30-minute steps backwards from sign change
     t_end = sign_change_time
-    
-    # Go back up to 3 days (Moon stays in sign ~2.5 days)
+
+    # Go back up to 3 days (Moon stays in a sign ~2.5 days)
     search_hours = 72
     step_minutes = 15
     steps = int(search_hours * 60 / step_minutes)
-    
-    last_aspect_time = None
-    
+
     for step in range(steps):
         jd = t_end.tt - (step * step_minutes) / (24 * 60)
         t = ts.tt_jd(jd)
-        
+
         jd_prev = t_end.tt - ((step + 1) * step_minutes) / (24 * 60)
         t_prev = ts.tt_jd(jd_prev)
-        
+
         m_lon = moon_longitude(t)
         m_lon_prev = moon_longitude(t_prev)
-        
+
         for planet in PLANETS:
             p_lon = planet_longitude(planet, t)
             p_lon_prev = planet_longitude(planet, t_prev)
-            
+
+            diff = (m_lon - p_lon) % 360
+            diff_prev = (m_lon_prev - p_lon_prev) % 360
+
             for aspect_angle in ASPECTS:
-                # Check if aspect was exact between t_prev and t
-                diff = (m_lon - p_lon) % 360
-                diff_prev = (m_lon_prev - p_lon_prev) % 360
-                
-                # Check if we crossed the exact aspect angle
+                # An aspect can occur on either side of the body (e.g. sextile at
+                # +60 and -60 == 300), so check both target separations.
                 for target in [aspect_angle, 360 - aspect_angle if aspect_angle > 0 else -1]:
                     if target < 0:
                         continue
-                    
+
                     d1 = (diff_prev - target) % 360
                     d2 = (diff - target) % 360
-                    
                     if d1 > 180:
                         d1 -= 360
                     if d2 > 180:
                         d2 -= 360
-                    
-                    # Check for sign change in difference (aspect was crossed)
-                    if (d1 <= 0 and d2 >= 0) or (d1 >= 0 and d2 <= 0):
-                        if abs(d1) < 5 and abs(d2) < 5:  # reasonable range
-                            if last_aspect_time is None:
-                                last_aspect_time = t
-                                return last_aspect_time  # First one found going backwards is the last aspect
-    
-    return last_aspect_time
+
+                    # Sign change with small magnitude => aspect crossed in this bracket.
+                    if ((d1 <= 0 <= d2) or (d1 >= 0 >= d2)) and abs(d1) < 5 and abs(d2) < 5:
+                        # First crossing found going backwards is the last aspect;
+                        # refine its exact time before returning.
+                        return _refine_aspect(planet, target, jd_prev, jd)
+
+    return None
 
 
 def calculate_void_times(year):

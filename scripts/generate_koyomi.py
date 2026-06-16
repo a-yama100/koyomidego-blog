@@ -86,89 +86,156 @@ def get_lunar_phases_for_year(year):
 
 
 # === 3. Solar Terms (Nijushi Sekki) ===
+# 二十四節気 occur when the Sun's *apparent* ecliptic longitude, referred to the
+# true equinox/ecliptic of date, reaches a multiple of 15 degrees. The frame must
+# be "of date" (not J2000) — precession is ~0.36 deg by 2026 (~8.7 hours of solar
+# motion), enough to push a term across a JST day boundary. The term is recorded on
+# the JST calendar date of that instant.
+TERM_BY_LON = {
+    315: '立春', 330: '雨水', 345: '啓蟄', 0: '春分', 15: '清明', 30: '穀雨',
+    45: '立夏', 60: '小満', 75: '芒種', 90: '夏至', 105: '小暑', 120: '大暑',
+    135: '立秋', 150: '処暑', 165: '白露', 180: '秋分', 195: '寒露', 210: '霜降',
+    225: '立冬', 240: '小雪', 255: '大雪', 270: '冬至', 285: '小寒', 300: '大寒',
+}
+
+
+def _sun_apparent_lon(ts, earth, sun, jd):
+    """Apparent geocentric ecliptic longitude of the Sun (of date), in degrees."""
+    t = ts.tt_jd(jd)
+    return earth.at(t).observe(sun).apparent().ecliptic_latlon(epoch=t)[1].degrees
+
+
+def _find_lon_crossing(lon_fn, target, lo, hi):
+    """Bisection: time (TT JD) at which lon_fn rises through `target` degrees."""
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        diff = (lon_fn(mid) - target) % 360
+        if 0 < diff < 180:
+            hi = mid
+        else:
+            lo = mid
+    return (lo + hi) / 2
+
+
+def _scan_longitude_crossings(year, targets, lon_fn):
+    """Yield (jst_instant, target) for each crossing of every value in `targets`
+    (degrees) during a span comfortably covering the given year."""
+    ts = load.timescale()
+    t0 = ts.utc(year - 1, 11, 1).tt
+    t1 = ts.utc(year + 1, 2, 1).tt
+    step = 0.5
+    prev_t = t0
+    prev_lon = lon_fn(t0)
+    t = t0 + step
+    while t <= t1:
+        cur_lon = lon_fn(t)
+        for target in targets:
+            a, b = prev_lon % 360, cur_lon % 360
+            if a > 350 and b < 10:
+                b += 360
+            if a < 10 and b > 350:
+                a += 360
+            for cand in (target, target + 360):
+                if a < cand <= b or a <= cand < b:
+                    jd = _find_lon_crossing(lon_fn, target, prev_t, t)
+                    inst = ts.tt_jd(jd).utc_datetime().astimezone(JST)
+                    yield inst, target
+        prev_t, prev_lon = t, cur_lon
+        t += step
+
+
 def get_solar_terms_for_year(year):
     if not HAS_SKYFIELD:
         return {}
     ts = load.timescale()
     eph = load('de421.bsp')
     earth, sun = eph['earth'], eph['sun']
-    TERM_NAMES = [
-        '小寒', '大寒', '立春', '雨水', '啓蟄', '春分', '清明', '穀雨',
-        '立夏', '小満', '芒種', '夏至', '小暑', '大暑', '立秋', '処暑',
-        '白露', '秋分', '寒露', '霜降', '立冬', '小雪', '大雪', '冬至',
-    ]
+    lon_fn = lambda jd: _sun_apparent_lon(ts, earth, sun, jd)
+
     result = {}
-    for month in range(1, 13):
-        for day in range(1, 32):
-            try:
-                d = date(year, month, day)
-            except ValueError:
-                continue
-            t = ts.utc(year, month, day, 12)
-            astrometric = earth.at(t).observe(sun)
-            deg = astrometric.apparent().ecliptic_latlon()[1].degrees
-            prev_d = d - timedelta(days=1)
-            t_prev = ts.utc(prev_d.year, prev_d.month, prev_d.day, 12)
-            deg_prev = earth.at(t_prev).observe(sun).apparent().ecliptic_latlon()[1].degrees
-            for i in range(24):
-                boundary = i * 15
-                dp, dc = deg_prev % 360, deg % 360
-                if dp > 350 and dc < 10: dc += 360
-                if dp < 10 and dc > 350: dp += 360
-                if dp < boundary <= dc or dp <= boundary < dc:
-                    term_idx = int(((boundary - 285) / 15) % 24)
-                    result[d] = TERM_NAMES[term_idx]
+    for inst, target in _scan_longitude_crossings(year, list(range(0, 360, 15)), lon_fn):
+        if inst.year == year:
+            result[inst.date()] = TERM_BY_LON[target]
     return result
 
 
-# === 4. Rokuyo (六曜) ===
-# Rokuyo is determined by (lunar_month + lunar_day) % 6
-# We need lunar calendar conversion
+# === 4. Lunar calendar (旧暦) — accurate, from astronomical new moons ===
+# A lunar month begins on the JST date of the new moon (朔). Its number is set by
+# the 中気 (major solar term) it contains: 冬至→11月, 大寒→12月, 雨水→正月, ...
+# A month with no 中気 is a leap month (閏月) and keeps the previous month's number.
+# This is the standard Japanese rule and is what 六曜 / 旧暦日 are built from.
 
-def gregorian_to_lunar_approx(d):
-    """Approximate lunar date using astronomical new moon.
-    Returns (lunar_month, lunar_day) tuple.
-    This is simplified - for production, use a proper lunar calendar library.
-    """
-    # Use synodic month approximation
-    # Known: 2026-02-17 = lunar 1/1 (from user data: 旧正月)
-    LUNAR_EPOCH = date(2026, 2, 17)  # = Lunar 2026 1/1
-    SYNODIC_MONTH = 29.53059
-
-    delta = (d - LUNAR_EPOCH).days
-
-    if delta >= 0:
-        lunar_month_offset = int(delta / SYNODIC_MONTH)
-        lunar_day = int(delta - lunar_month_offset * SYNODIC_MONTH) + 1
-        lunar_month = (lunar_month_offset % 12) + 1
-    else:
-        # Before epoch - go backwards
-        abs_delta = abs(delta)
-        lunar_month_offset = int(abs_delta / SYNODIC_MONTH)
-        remaining = abs_delta - lunar_month_offset * SYNODIC_MONTH
-        lunar_day = int(SYNODIC_MONTH - remaining) + 1
-        lunar_month = 12 - (lunar_month_offset % 12)
-        if lunar_month <= 0:
-            lunar_month += 12
-
-    if lunar_day < 1:
-        lunar_day = 1
-    if lunar_day > 30:
-        lunar_day = 30
-
-    return (lunar_month, lunar_day)
+# 中気 longitude -> lunar month number
+CHUKI_MONTH = {
+    270: 11, 300: 12, 330: 1, 0: 2, 30: 3, 60: 4,
+    90: 5, 120: 6, 150: 7, 180: 8, 210: 9, 240: 10,
+}
 
 
+def _new_moon_dates(year):
+    """JST dates of every new moon in a span covering the year."""
+    from skyfield.almanac import find_discrete, moon_phases
+    ts = load.timescale()
+    eph = load('de421.bsp')
+    t0 = ts.utc(year - 1, 11, 1)
+    t1 = ts.utc(year + 2, 2, 1)
+    t, phase = find_discrete(t0, t1, moon_phases(eph))
+    return [ti.utc_datetime().astimezone(JST).date()
+            for ti, ph in zip(t, phase) if ph == 0]
+
+
+def _chuki_dates(year):
+    """List of (jst_date, lunar_month_number) for the 12 中気 across the span."""
+    ts = load.timescale()
+    eph = load('de421.bsp')
+    earth, sun = eph['earth'], eph['sun']
+    lon_fn = lambda jd: _sun_apparent_lon(ts, earth, sun, jd)
+    out = []
+    for inst, target in _scan_longitude_crossings(year, list(CHUKI_MONTH.keys()), lon_fn):
+        out.append((inst.date(), CHUKI_MONTH[target]))
+    return out
+
+
+def build_lunar_months(year):
+    """Ordered list of (start_date, next_start_date, month_no, is_leap) covering year."""
+    if not HAS_SKYFIELD:
+        return []
+    starts = _new_moon_dates(year)
+    chukis = _chuki_dates(year)
+    months = []
+    prev_no = None
+    for i in range(len(starts) - 1):
+        s, e = starts[i], starts[i + 1]
+        inside = [mn for (cd, mn) in chukis if s <= cd < e]
+        if inside:
+            no, leap = inside[0], False
+        else:
+            no, leap = prev_no, True
+        months.append((s, e, no, leap))
+        prev_no = no
+    return months
+
+
+def lunar_date(d, lunar_months):
+    """Return (lunar_month, lunar_day, is_leap) for a Gregorian date."""
+    for s, e, no, leap in lunar_months:
+        if s <= d < e:
+            return (no, (d - s).days + 1, leap)
+    return (1, 1, False)  # outside covered span (should not happen within `year`)
+
+
+# === 5. Rokuyo (六曜) ===
+# Determined by (lunar_month + lunar_day) % 6; the cycle resets at each new lunar
+# month, which is why 六曜 appears to "jump" on 旧暦 1日.
 ROKUYO = ['先勝', '友引', '先負', '仏滅', '大安', '赤口']
 
-def get_rokuyo(d):
-    lm, ld = gregorian_to_lunar_approx(d)
-    return ROKUYO[(lm + ld - 2) % 6]
+def get_rokuyo(lunar_month, lunar_day):
+    return ROKUYO[(lunar_month + lunar_day - 2) % 6]
 
 
 # === 5. Lucky Days ===
 
-def get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms_map, ichiryumanbai_boundaries=None):
+def get_lucky_days(d, eto_name, junishi, jikkan, solar_terms_map, ichiryumanbai_boundaries=None):
     lucky = []
 
     # 寅の日
@@ -191,7 +258,7 @@ def get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms_map, i
         lucky.append('甲子の日')
 
     # 一粒万倍日
-    if is_ichiryuu_manbai(d, lunar_month, junishi, ichiryumanbai_boundaries=ichiryumanbai_boundaries):
+    if is_ichiryuu_manbai(d, junishi, ichiryumanbai_boundaries):
         lucky.append('一粒万倍日')
 
     # 天赦日
@@ -202,152 +269,37 @@ def get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms_map, i
 
 
 def compute_ichiryumanbai_boundaries(solar_terms_map):
-    """Pre-compute effective setsugetsu boundaries for ichiryumanbai.
-    Uses a 1-day shift from official solar term dates based on JST transition time.
-    If transition < 02:00, shift to previous day with is_shifted=False (no overlap).
-    Otherwise, shift to previous day with is_shifted=True (overlap allowed).
+    """Ordered (setsu_name, date) boundaries for 一粒万倍日.
+
+    The 節月 used by 一粒万倍日 begins on its 節入り (節気) date. With solar terms now
+    computed in the correct ecliptic-of-date frame, the boundary is simply the 節 date
+    — no artificial 1-day shift is needed. Dates before the first boundary (小寒) fall
+    in 子月, handled by the '大雪' default in is_ichiryuu_manbai.
     """
-    from datetime import timedelta, timezone
-    JST = timezone(timedelta(hours=9))
-
-    node_terms_order = ['小寒','立春','啓蟄','清明','立夏','芒種',
-                        '小暑','立秋','白露','寒露','立冬','大雪']
-    TERM_LONS = {
-        '小寒':285,'立春':315,'啓蟄':345,'清明':15,
-        '立夏':45,'芒種':75,'小暑':105,'立秋':135,
-        '白露':165,'寒露':195,'立冬':225,'大雪':255,
-    }
-
-    node_dates_orig = []
-    for term in node_terms_order:
-        for dt, name in solar_terms_map.items():
-            if name == term:
-                node_dates_orig.append((term, dt))
-                break
-    node_dates_orig.sort(key=lambda x: x[1])
-
-    effective_dates = []
-    try:
-        from skyfield.api import load as _load
-        _ts = _load.timescale()
-        _eph = _load('de421.bsp')
-        _earth = _eph['earth']
-        _sun = _eph['sun']
-
-        for term, orig_dt in node_dates_orig:
-            tgt = TERM_LONS.get(term)
-            if tgt is not None:
-                t0 = _ts.utc(orig_dt.year, orig_dt.month, orig_dt.day - 1, -9)
-                t1 = _ts.utc(orig_dt.year, orig_dt.month, orig_dt.day + 1, -9)
-                for _ in range(50):
-                    tm = _ts.tt_jd((t0.tt + t1.tt) / 2)
-                    ast = _earth.at(tm).observe(_sun)
-                    _, lon, _ = ast.apparent().ecliptic_latlon()
-                    diff = (lon.degrees - tgt) % 360
-                    if diff < 180 and diff > 0:
-                        t1 = tm
-                    else:
-                        t0 = tm
-                exact_jst = tm.utc_datetime().astimezone(JST)
-                if exact_jst.date() == orig_dt and exact_jst.hour < 1:
-                    # 境界を前日に移動するが、is_shifted=Falseにして重複判定を無効化する
-                    effective_dates.append((term, orig_dt - timedelta(days=1), False))
-                else:
-                    # 通常のシフト（重複判定あり）
-                    effective_dates.append((term, orig_dt - timedelta(days=1), True))
-            else:
-                effective_dates.append((term, orig_dt - timedelta(days=1), True))
-    except Exception:
-        effective_dates = [(n, dt - timedelta(days=1), True) for n, dt in node_dates_orig]
-
-    effective_dates.sort(key=lambda x: x[1])
-    return effective_dates
+    node_terms = ['小寒', '立春', '啓蟄', '清明', '立夏', '芒種',
+                  '小暑', '立秋', '白露', '寒露', '立冬', '大雪']
+    bounds = [(name, dt) for dt, name in solar_terms_map.items() if name in node_terms]
+    bounds.sort(key=lambda x: x[1])
+    return bounds
 
 
-def is_ichiryuu_manbai(d, lunar_month, junishi, ichiryumanbai_boundaries=None):
-    if ichiryumanbai_boundaries is None:
+def is_ichiryuu_manbai(d, junishi, ichiryumanbai_boundaries=None):
+    """一粒万倍日: the day's 十二支 matches the rule for the current 節月."""
+    if not ichiryumanbai_boundaries:
         return False
     rules = {
         '小寒': ['子', '卯'], '立春': ['丑', '午'], '啓蟄': ['寅', '酉'], '清明': ['子', '卯'],
         '立夏': ['卯', '辰'], '芒種': ['巳', '午'], '小暑': ['午', '酉'], '立秋': ['子', '未'],
         '白露': ['卯', '申'], '寒露': ['午', '酉'], '立冬': ['酉', '戌'], '大雪': ['亥', '子'],
     }
-    current_period = '大雪'
-    current_idx = -1
-    for i, bound in enumerate(ichiryumanbai_boundaries):
-        name, dt = bound[0], bound[1]
+    period = '大雪'  # 子月 (大雪～小寒前); also covers early January before 小寒
+    for name, dt in ichiryumanbai_boundaries:
         if dt <= d:
-            current_period, current_idx = name, i
+            period = name
         else:
             break
-    if current_period in rules and junishi in rules[current_period]:
-        return True
-    if current_idx >= 0:
-        _, b_dt, is_shifted = ichiryumanbai_boundaries[current_idx]
-        if b_dt == d and is_shifted:
-            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else '大雪'
-            if prev_name in rules and junishi in rules[prev_name]:
-                return True
-    return False
-    rules = {
-        '小寒': ['子', '卯'], '立春': ['丑', '午'], '啓蟄': ['寅', '酉'], '清明': ['子', '卯'],
-        '立夏': ['卯', '辰'], '芒種': ['巳', '午'], '小暑': ['午', '酉'], '立秋': ['子', '未'],
-        '白露': ['卯', '申'], '寒露': ['午', '酉'], '立冬': ['酉', '戌'], '大雪': ['亥', '子'],
-    }
-    current_period = '大雪'
-    current_idx = -1
-    for i, bound in enumerate(ichiryumanbai_boundaries):
-        name, dt = bound[0], bound[1]
-        if dt <= d:
-            current_period, current_idx = name, i
-        else:
-            break
-    if current_period in rules and junishi in rules[current_period]:
-        return True
-    if current_idx >= 0:
-        _, b_dt, is_shifted = ichiryumanbai_boundaries[current_idx]
-        if b_dt == d and is_shifted:
-            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else '大雪'
-            if prev_name in rules and junishi in rules[prev_name]:
-                return True
-    return False
+    return junishi in rules.get(period, [])
 
-    rules = {
-        '小寒': ['子', '卯'],
-        '立春': ['丑', '午'],
-        '啓蟄': ['寅', '酉'],
-        '清明': ['子', '卯'],
-        '立夏': ['卯', '辰'],
-        '芒種': ['巳', '午'],
-        '小暑': ['午', '酉'],
-        '立秋': ['子', '未'],
-        '白露': ['卯', '申'],
-        '寒露': ['午', '酉'],
-        '立冬': ['酉', '戌'],
-        '大雪': ['亥', '子'],
-    }
-
-    current_period = '大雪'
-    current_idx = -1
-    for i, bound in enumerate(ichiryumanbai_boundaries):
-        name, dt = bound[0], bound[1]
-        if dt <= d:
-            current_period = name
-            current_idx = i
-        else:
-            break
-
-    if current_period in rules and junishi in rules[current_period]:
-        return True
-
-    if current_idx >= 0:
-        _, b_dt, is_shifted = ichiryumanbai_boundaries[current_idx]
-        if b_dt == d and is_shifted:
-            prev_name = ichiryumanbai_boundaries[current_idx - 1][0] if current_idx > 0 else '大雪'
-            if prev_name in rules and junishi in rules[prev_name]:
-                return True
-
-    return False
 
 def is_tensha(d, solar_terms_map, eto_name):
     """天赦日: Best day of the year, based on season + eto
@@ -565,6 +517,9 @@ def generate_year_data(year):
     print("  Computing solar terms...")
     solar_terms = get_solar_terms_for_year(year)
 
+    print("  Building lunar calendar (旧暦)...")
+    lunar_months = build_lunar_months(year)
+
     print("  Computing ichiryumanbai boundaries...")
     ichiryu_bounds = compute_ichiryumanbai_boundaries(solar_terms)
 
@@ -582,13 +537,13 @@ def generate_year_data(year):
         eto_name = get_eto_name(d)
         junishi = get_junishi(d)
         jikkan = get_jikkan(d)
-        lunar_month, lunar_day = gregorian_to_lunar_approx(d)
-        rokuyo = get_rokuyo(d)
+        lunar_month, lunar_day, _lunar_leap = lunar_date(d, lunar_months)
+        rokuyo = get_rokuyo(lunar_month, lunar_day)
         lunar_phase = lunar_phases.get(d)
         solar_term = solar_terms.get(d)
         holiday = holidays.get(d)
 
-        lucky_days = get_lucky_days(d, eto_name, junishi, jikkan, lunar_month, solar_terms, ichiryumanbai_boundaries=ichiryu_bounds)
+        lucky_days = get_lucky_days(d, eto_name, junishi, jikkan, solar_terms, ichiryumanbai_boundaries=ichiryu_bounds)
         unlucky_days = get_unlucky_days(d, lunar_month, lunar_day)
 
         notes = holiday
