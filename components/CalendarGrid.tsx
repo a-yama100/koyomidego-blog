@@ -61,7 +61,9 @@ export function CalendarGrid({ year, month, events, scores, voidTimes }: Props) 
   const dayHeaderColors = ['text-red-600 bg-red-50', 'text-gray-700 bg-gray-50', 'text-gray-700 bg-gray-50', 'text-gray-700 bg-gray-50', 'text-gray-700 bg-gray-50', 'text-gray-700 bg-gray-50', 'text-blue-600 bg-blue-50']
 
   return (
-    <div className="border-2 border-indigo-200 rounded-xl overflow-hidden shadow-lg">
+    <>
+    {/* Desktop: 7-column month grid */}
+    <div className="hidden md:block border-2 border-indigo-200 rounded-xl overflow-hidden shadow-lg">
       <div className="grid grid-cols-7">
         {dayHeaders.map((d, i) => (
           <div key={i} className={'text-center py-3 text-base font-bold border-b-2 border-indigo-200 ' + dayHeaderColors[i]}>{d}</div>
@@ -145,5 +147,64 @@ export function CalendarGrid({ year, month, events, scores, voidTimes }: Props) 
         })}
       </div>
     </div>
+
+    {/* Mobile: per-day agenda list */}
+    <div className="md:hidden space-y-2">
+      {days.filter(d => d.isCurrentMonth).map((day) => {
+        const dow = new Date(day.date).getDay()
+        const isToday = day.date === todayStr
+        const overallScore = day.scores.find(s => s.category === 'overall')
+        const ev = day.event
+        const hasLucky = !!(ev && ev.lucky_days && ev.lucky_days.length)
+        return (
+          <div
+            key={day.date}
+            className={
+              'flex gap-3 rounded-xl border p-3 '
+              + (isToday ? 'border-indigo-500 ring-2 ring-indigo-200 ' : 'border-gray-200 ')
+              + (hasLucky ? 'bg-amber-50/40 ' : 'bg-white ')
+            }
+          >
+            <div className="flex w-11 shrink-0 flex-col items-center">
+              <div className={'text-2xl font-bold leading-none ' + (dow === 0 ? 'text-red-600' : dow === 6 ? 'text-blue-600' : 'text-gray-900')}>{day.dayOfMonth}</div>
+              <div className={'mt-0.5 text-xs ' + (dow === 0 ? 'text-red-600' : dow === 6 ? 'text-blue-600' : 'text-gray-500')}>{dayHeaders[dow]}</div>
+              {overallScore && (
+                <div className={'mt-1 text-xs font-bold ' + (overallScore.score >= 80 ? 'text-amber-600' : overallScore.score >= 60 ? 'text-indigo-600' : 'text-gray-400')}>{overallScore.score + '点'}</div>
+              )}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-wrap content-start items-center gap-1">
+              {ev && ev.rokuyo && (
+                <span className={'text-sm font-medium ' + (ROKUYO_COLORS[ev.rokuyo] || 'text-gray-500')}>{ev.rokuyo}</span>
+              )}
+              {ev && ev.lucky_days && ev.lucky_days.map((ld, j) => (
+                <span key={'l' + j} className={'rounded-md border-2 px-1.5 py-0.5 text-xs font-bold ' + (LUCKY_DAY_COLORS[ld] || 'bg-indigo-100 text-indigo-800 border-indigo-300')}>{ld}</span>
+              ))}
+              {ev && ev.unlucky_days && ev.unlucky_days.map((ud, j) => (
+                <span key={'u' + j} className={'rounded-md border px-1.5 py-0.5 text-xs font-medium ' + (UNLUCKY_COLORS[ud] || 'bg-gray-100 text-gray-500 border-gray-300')}>{ud}</span>
+              ))}
+              {ev && ev.lunar_phase && (
+                <span className="rounded-md bg-purple-100 px-1.5 py-0.5 text-xs font-bold text-purple-700">{ev.lunar_phase}</span>
+              )}
+              {ev && ev.solar_term && (
+                <span className="rounded-md bg-green-100 px-1.5 py-0.5 text-xs font-bold text-green-800">{ev.solar_term}</span>
+              )}
+              {ev && ev.eto && (
+                <span className="text-xs text-gray-400">{ev.eto}</span>
+              )}
+              {day.voidTimes.map((v, j) => (
+                <span key={'v' + j} className="rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-600">{'VoC ' + formatVoidTime(v.start_at) + '-' + formatVoidTime(v.end_at)}</span>
+              ))}
+              {ev && ev.notes && (
+                <span className="w-full text-xs font-bold text-pink-700">{ev.notes}</span>
+              )}
+              {!ev && day.voidTimes.length === 0 && (
+                <span className="text-xs text-gray-300">{'—'}</span>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+    </>
   )
 }
