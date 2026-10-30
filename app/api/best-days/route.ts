@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { rateLimit, clientIp, TOO_MANY } from '@/lib/security/rateLimit'
 
 function cachedJson(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -13,9 +14,17 @@ function cachedJson(data: unknown, status = 200) {
 
 
 export async function GET(request: NextRequest) {
+  // 回数制限: 同じ IP から 1 分に 60 回まで（読み取りだけだが、DB を叩き続けられないように）
+  if (!(await rateLimit('best-days:ip:' + clientIp(request), 60, 60))) {
+    return NextResponse.json(TOO_MANY, { status: 429 })
+  }
   const { searchParams } = new URL(request.url)
   const category = searchParams.get('category') || 'overall'
   const months = parseInt(searchParams.get('months') || '3')
+  // 受け付ける値の幅（画面から送るのは 1〜12 か月と決まった分類だけ）
+  if (category.length > 50 || !Number.isInteger(months) || months < 1 || months > 12) {
+    return NextResponse.json({ error: '指定が正しくありません。' }, { status: 400 })
+  }
 
   const now = new Date()
   const startDate = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0')

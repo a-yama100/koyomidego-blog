@@ -3,6 +3,7 @@ import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import './globals.css'
 import Script from 'next/script'
+import { jsonLd as toJsonLd } from '@/lib/security/escapeHtml'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://koyomi.phaiworks.com'),
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: toJsonLd({
               "@context": "https://schema.org",
               "@type": "WebApplication",
               "name": "暦でゴー！",
