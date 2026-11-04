@@ -31,8 +31,10 @@ export function MonthlyBestDays({ year, month, events, scores, voidTimes }: Prop
     })
   })
 
+  // 吉日の名前（一粒万倍日など）がある日に加えて、六曜の大安の日も吉日として並べる
+  // （大安だけの日が一覧から抜け、スコア高い順に入らなかったため）
   const luckyDaysListRaw = events
-    .filter(e => e.lucky_days && e.lucky_days.length > 0)
+    .filter(e => (e.lucky_days && e.lucky_days.length > 0) || e.rokuyo === '大安')
     .map(e => ({
       date: e.date,
       luckyDays: e.lucky_days,
@@ -64,9 +66,12 @@ export function MonthlyBestDays({ year, month, events, scores, voidTimes }: Prop
     <div className="mt-10 space-y-10">
       <section>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <h2 className="text-xl font-bold text-gray-900">
-            {year + '年' + month + '月の吉日一覧'}
-          </h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              {year + '年' + month + '月の吉日一覧'}
+            </h2>
+            <p className="text-xs text-gray-500 mt-1">{'点数は総合運の点数です。'}</p>
+          </div>
           <div className="flex gap-2">
             <button onClick={() => setSortMode('default')} className={'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ' + (sortMode === 'default' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}>{'日付順'}</button>
             <button onClick={() => setSortMode('high')} className={'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ' + (sortMode === 'high' ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}>{'スコア高い順'}</button>
@@ -114,7 +119,8 @@ export function MonthlyBestDays({ year, month, events, scores, voidTimes }: Prop
       </section>
 
       <section>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">{'行動別おすすめ日'}</h2>
+        <h2 className="text-xl font-bold text-gray-900">{'行動別おすすめ日'}</h2>
+        <p className="text-xs text-gray-500 mt-1 mb-4">{'点数は行動ごとに計算しています。たとえば大安は引越し・結婚で高く評価するため、同じ日でも行動によって点数が異なります。'}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {categories.map(cat => {
             const items = bestDaysByCategory[cat]
